@@ -1,0 +1,76 @@
+#!/bin/sh
+#
+# Startup script to for SnortSAM
+#
+# chkconfig: - 98 02
+# description: SnortSAM dynamic firewall plug-in for Snort
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Source networking configuration.
+. /etc/sysconfig/network
+
+# Check that networking is up.
+[ ${NETWORKING} = "no" ] && exit 0
+
+RETVAL=0
+prog="snortsam"
+
+# See how we were called.
+case "$1" in
+  start)
+	echo -n $"Starting $prog: "
+	DNSCHECK=`host -W 5 ns1.clearsdn.com 2>&1 | grep ns1.clearsdn.com`
+	if test "x`/sbin/pidof snortsam`" != x; then
+		echo
+	elif [ -z "$DNSCHECK" ]; then
+		echo -n "... delaying"
+		success
+		echo
+	else
+		daemon snortsam /etc/snortsam.conf >/dev/null 2>&1
+		RETVAL=$?
+		if [ $RETVAL -eq 0 ]; then
+			success
+			touch /var/lock/snortsam
+		else
+			failure
+		fi
+		echo
+	fi
+	;;
+  stop)
+	echo -n $"Stopping $prog: "
+	killproc snortsam
+	RETVAL=$?
+	echo
+	if [ $RETVAL -eq 0 ]; then
+		rm -f /var/lock/snortsam
+	fi
+	;;
+  status)
+	status snortsam
+	RETVAL=$?
+	;;
+  condrestart)
+	if test "x`/sbin/pidof snortsam`" != x; then
+		$0 stop
+		sleep 2
+		$0 start
+		RETVAL=$?
+	fi
+	;;
+  restart|reload)
+	$0 stop
+	sleep 2
+	$0 start
+	RETVAL=$?
+	;;
+  *)
+	echo "Usage: $prog {start|stop|status|restart|reload}"
+	exit 1
+esac
+
+exit $RETVAL
+

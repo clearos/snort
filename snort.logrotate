@@ -1,0 +1,13 @@
+/var/log/snort/syslog {
+    missingok
+    postrotate
+        /sbin/service snort condrestart >/dev/null 2>&1 || true
+    endscript
+}
+
+/var/log/snortsam {
+    missingok
+    postrotate
+        /sbin/service snortsam condrestart >/dev/null 2>&1 || true
+    endscript
+}

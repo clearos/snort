@@ -1,0 +1,88 @@
+#!/bin/sh
+#
+# Startup script to for Snort Network Intrusion Detection
+#
+# chkconfig: - 99 01
+# description: Snort Network Intrusion Detection System
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Source networking configuration.
+. /etc/sysconfig/network
+
+# Check that networking is up.
+[ ${NETWORKING} = "no" ] && exit 0
+
+RETVAL=0
+prog="snort"
+
+# See how we were called.
+case "$1" in
+  start)
+    echo -n $"Starting $prog: "
+    if test "x`/sbin/pidof snort`" != x; then
+        failure
+        echo ""
+    else 
+        # PPPOEKLUDGE: sigh... don't start up when PPPoE is down.
+        # Syswatch will restart it when the network is back up.
+        DNSCHECK=`host -W 5 ns1.clearsdn.com 2>&1 | grep ns1.clearsdn.com`
+        if [ -z "$DNSCHECK" ]; then
+            echo -n "... waiting for network connection"
+            success
+            echo ""
+            exit 0
+        fi
+
+        # Add support for multiwan
+        [ -e /etc/clearos/network.conf ] && source /etc/clearos/network.conf
+        if [ -n "$EXTIF" ]; then 
+            for INTERFACE in $EXTIF; do
+                ETH=""
+                [ -e "/etc/sysconfig/network-scripts/ifcfg-$INTERFACE" ] && source "/etc/sysconfig/network-scripts/ifcfg-$INTERFACE"
+                [ -n "$ETH" ] && INTERFACE="$ETH"
+                daemon snort -i $INTERFACE -u snort -g snort -D -c /etc/snort.conf >/dev/null 2>&1
+            done
+        else
+            daemon snort -D -c /etc/snort.conf >/dev/null 2>&1
+        fi
+        RETVAL=$?
+        # Ugh... snort startup is noisy
+        [ $RETVAL -eq 0 ] && echo_success
+        [ $RETVAL -ne 0 ] && echo_failure
+        echo
+        [ $RETVAL -eq 0 ] && touch /var/lock/snort
+    fi
+    ;;
+  stop)
+    echo -n $"Stopping $prog: "
+    # PID file permission handling is wonky
+    rm -f /var/run/snort* >/dev/null 2>&1
+    killproc snort
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && rm -f /var/lock/snort
+    ;;
+  status)
+    status snort
+    RETVAL=$?
+    ;;
+  condrestart)
+    if test "x`/sbin/pidof snort`" != x; then
+        $0 stop
+        $0 start
+        RETVAL=$?
+    fi
+    ;;
+  restart|reload)
+    $0 stop
+    $0 start
+    RETVAL=$?
+    ;;
+  *)
+    echo $"Usage: $0 {start|stop|status|restart|condrestart|reload}"
+    exit 1
+esac
+
+exit $RETVAL
