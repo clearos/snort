@@ -1,6 +1,6 @@
 Name: snort
 Version: 2.9.6.2
-Release: 1%dist
+Release: 2%dist
 License: GPLv2
 Group: Applications/Misc
 Packager: ClearFoundation
@@ -18,6 +18,7 @@ Source112: snortsam-whitelist.conf
 Source113: snortsam-dns-whitelist.conf
 Source200: autogen.sh
 Patch1: snortsam-2.9.5.3.diff
+Patch2: snortsam-ifnamsiz.diff
 Requires: daq >= 2.0.2
 Requires: libpcap >= 1.0
 Requires(pre): shadow-utils
@@ -61,6 +62,7 @@ developing applications that use snort.
 %prep
 %setup -q -n %name-%version -a 100
 %patch1 -p1
+%patch2 -p0
 
 %build
 sh %SOURCE200
@@ -202,6 +204,9 @@ fi
 %{_libdir}/pkgconfig/snort_preproc.pc
 
 %changelog
+* Sat Oct 31 2015 ClearFoundation <developer@clearfoundation.com> - 2.9.6.2-2.clear
+- Added patch for IFNAMSIZ interface name lengths in ssp_iptables.c (snortsam).
+
 * Wed Feb 19 2014 ClearFoundation <developer@clearfoundation.com> - 2.9.5.3-2.clear
 - Added requirement for daq >= 2.0.1-2
 

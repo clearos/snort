@@ -1,0 +1,32 @@
+diff -ruN snortsam/src/ssp_iptables.c snortsam-ifnamsiz/src/ssp_iptables.c
+--- snortsam/src/ssp_iptables.c	2008-12-17 17:16:23.000000000 -0500
++++ snortsam-ifnamsiz/src/ssp_iptables.c	2015-10-21 17:46:01.405565092 -0400
+@@ -48,6 +48,8 @@
+ #define		__SSP_IPT_C__
+ 
+ #include "snortsam.h"
++
++#include <net/if.h>
+ #include "ssp_iptables.h"
+ 
+ #include <sys/types.h>
+@@ -57,7 +59,6 @@
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ 
+-
+ /* Set this if you want IP tables to save the tables after every (un)block. */
+ 
+ /* #define SAVETABLES */
+diff -ruN snortsam/src/ssp_iptables.h snortsam-ifnamsiz/src/ssp_iptables.h
+--- snortsam/src/ssp_iptables.h	2008-04-26 15:53:21.000000000 -0400
++++ snortsam-ifnamsiz/src/ssp_iptables.h	2015-10-21 17:41:48.670540388 -0400
+@@ -46,7 +46,7 @@
+ #define		IPTLOGLEVEL	"syslog.info"
+ 
+ typedef struct _iptdata				/* List of IPTABLES firewalls */
+-{	char iface[10];
++{	char iface[IF_NAMESIZE];
+ 	char loglv[20];
+ }	IPTDATA;
+ 
