@@ -176,10 +176,10 @@ index b719afe..f5fc3e5 100644
  	EBTParse,
 diff --git a/snortsam/src/ssp_ipset.c b/snortsam/src/ssp_ipset.c
 new file mode 100644
-index 0000000..6d9c5bb
+index 0000000..99c6e45
 --- /dev/null
 +++ b/snortsam/src/ssp_ipset.c
-@@ -0,0 +1,201 @@
+@@ -0,0 +1,231 @@
 +/* $Id: ssp_ipset.c,v 1.0 2017/08/15 10:47:00 dsokoloski Exp $
 + *
 + *
@@ -228,7 +228,9 @@ index 0000000..6d9c5bb
 +#include "ssp_ipset.h"
 +
 +#include <sys/types.h>
++#include <sys/stat.h>
 +#include <stdio.h>
++#include <stdlib.h>
 +#include <string.h>
 +#include <stdarg.h>
 +#include <time.h>
@@ -286,6 +288,17 @@ index 0000000..6d9c5bb
 +*/
 +int IPSetInit(DATALIST *plugindatalist)
 +{
++    int fd;
++    struct stat state_stat;
++    char msg[STRBUFSIZE + 2], template[] = { "/tmp/snortsam-ipsetXXXXXX" };
++
++    // XXX: This can't be NULL otherwise plugin will be silently disabled.
++    plugindatalist->data = (void *)safemalloc(
++        sizeof(unsigned long),
++        "IPSetInit",
++        "ipset"
++    );
++
 +    if (IPSetExec(FALSE, "ipset --version") != 0) return FALSE;
 +
 +    if (IPSetExec(TRUE, "ipset -q -t -f /dev/null -L %s", IPSetINGRESS)) {
@@ -301,12 +314,29 @@ index 0000000..6d9c5bb
 +            IPSetSELF, IPSetTIMEOUT)) return FALSE;
 +    }
 +
-+    // XXX: This can't be NULL otherwise plugin will be silently disabled.
-+    plugindatalist->data = (void *)safemalloc(
-+        sizeof(unsigned long),
-+        "IPSetInit",
-+        "ipset"
-+    );
++    if (stat(IPSetSTATE, &state_stat) != 0) {
++        snprintf(msg, sizeof(msg) - 1,
++            "Error: [ipset] stat(%s): %s", IPSetSTATE, strerror(errno));
++        logmessage(1, msg, "ipset", 0);
++
++        if (errno != ENOENT) return FALSE;
++    }
++
++    if (state_stat.st_size > 0) {
++        IPSetExec(TRUE, "ipset -F %s", IPSetINGRESS);
++        IPSetExec(TRUE, "ipset -F %s", IPSetEGRESS);
++        IPSetExec(TRUE, "ipset -F %s", IPSetSELF);
++
++        if ((fd = mkstemp(template)) >= 0) {
++            IPSetExec(FALSE, "grep -v '^create' %s > %s",
++                IPSetSTATE, template);
++            IPSetExec(FALSE, "ipset restore -f %s", template);
++
++            close(fd);
++            unlink(template);
++        }
++    }
++
 +#ifdef FWSAMDEBUG
 +    printf("Debug: [ipset] Initialized.\n");
 +#endif
@@ -317,10 +347,10 @@ index 0000000..6d9c5bb
 +*/
 +void IPSetExit(DATALIST *plugindatalist)
 +{
++    IPSetExec(TRUE, "ipset save %s > %s", IPSetINGRESS, IPSetSTATE);
++    IPSetExec(TRUE, "ipset save %s >> %s", IPSetEGRESS, IPSetSTATE);
++    IPSetExec(TRUE, "ipset save %s >> %s", IPSetSELF, IPSetSTATE);
 +#ifdef FWSAMDEBUG
-+    IPSetExec(TRUE, "ipset -F %s", IPSetINGRESS);
-+    IPSetExec(TRUE, "ipset -F %s", IPSetEGRESS);
-+    IPSetExec(TRUE, "ipset -F %s", IPSetSELF);
 +    printf("Debug: [ipset] Exit.\n");
 +#endif
 +}
@@ -383,10 +413,10 @@ index 0000000..6d9c5bb
 + * */
 diff --git a/snortsam/src/ssp_ipset.h b/snortsam/src/ssp_ipset.h
 new file mode 100644
-index 0000000..c0995b5
+index 0000000..814b46b
 --- /dev/null
 +++ b/snortsam/src/ssp_ipset.h
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,60 @@
 +/* $Id: ssp_ipset.c,v 1.0 2017/08/15 10:47:00 dsokoloski Exp $
 + *
 + *
@@ -435,6 +465,7 @@ index 0000000..c0995b5
 +#define IPSetINGRESS    "snortsam_INGRESS"
 +#define IPSetEGRESS     "snortsam_EGRESS"
 +#define IPSetSELF       "snortsam_SELF"
++#define IPSetSTATE      "/var/db/snortsam-ipset.state"
 +
 +int IPSetInit(DATALIST *);
 +void IPSetBlock(BLOCKINFO *, void *, unsigned long);
