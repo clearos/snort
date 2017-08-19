@@ -1,0 +1,448 @@
+diff --git a/snortsam/conf/snortsam.conf.sample b/snortsam/conf/snortsam.conf.sample
+index a8edc39..fba55ff 100644
+--- a/snortsam/conf/snortsam.conf.sample
++++ b/snortsam/conf/snortsam.conf.sample
+@@ -660,6 +660,15 @@
+ # 
+ # 
+ # 
++# ipset
++#
++#   This plugin will call the iptables executable in order to block the host by
++#   adding a rule to the active IP set.
++#
++#   Example:   ipset
++#
++#
++#
+ # ebtables <adapter> <logoption>
+ # 
+ #   This plugin will call the ebtables executable in order to block the host by
+diff --git a/snortsam/contrib/snortsam-state.c b/snortsam/contrib/snortsam-state.c
+index 786bdc1..5fb5ec3 100644
+--- a/snortsam/contrib/snortsam-state.c
++++ b/snortsam/contrib/snortsam-state.c
+@@ -5,7 +5,7 @@
+ // -Delete SnortSam blocks.  If SnortSam is running, then we as SnortSam to
+ //  do the unblock.  If it's not running, we manipulate the state file ourself.
+ //
+-// $Id: snortsam-state.c,v 1.1 2005/07/26 17:51:51 fknobbe Exp $
++// $Id: $
+ //
+ ///////////////////////////////////////////////////////////////////////////////
+ //
+@@ -61,6 +61,10 @@
+ extern int errno;
+ extern int h_errno;
+ 
++#ifndef WIN32
++pthread_mutex_t waitms_mutex, inettoa_mutex, gethstname_mutex;
++#endif
++
+ static int verbose = 0;
+ 
+ static unsigned long const crctab[256] =
+@@ -632,6 +636,7 @@ static int station_unblock(FWsamStation *station, const BLOCKINFO *bi)
+ 	sampacket.status = FWSAM_STATUS_UNBLOCK;				// set unblock mode
+ 	sampacket.version = FWSAM_PACKETVERSION;				// set packet version
+ 
++	// TODO: delete?
+ 	sampacket.duration[0] = (char)bi->duration;				// set duration 
+ 	sampacket.duration[1] = (char)(bi->duration >> 8);
+ 	sampacket.duration[2] = (char)(bi->duration >> 16);
+@@ -1103,4 +1108,16 @@ int main(int argc, char *argv[])
+ 	return 0;
+ }
+ 
++//  To ensure thread-safety, Sleep/usleep have been wrapped inside mutex locks.
++void waitms(unsigned int dur)
++{
++#ifdef WIN32
++    Sleep(dur);
++#else
++    pthread_mutex_lock(&waitms_mutex);
++    usleep(dur * 1000);
++    pthread_mutex_unlock(&waitms_mutex);
++#endif
++}
++
+ // vi: ts=4
+diff --git a/snortsam/makesnortsam.sh b/snortsam/makesnortsam.sh
+index 64c6eb6..7f7133c 100644
+--- a/snortsam/makesnortsam.sh
++++ b/snortsam/makesnortsam.sh
+@@ -25,13 +25,17 @@ SSP_GENERIC_SRC="snortsam.c twofish.c ssp_ciscoacl.c ssp_cisco_nullroute.c ssp_c
+ 
+ systype=`uname`
+ SNORTSAM=../snortsam
+-SAMTOOL=../samtool
+ 
+ # samtool
++SAMTOOL=../samtool
+ SAMTOOL_SRC="samtool.c twofish.c"
+ 
++# snortsam-state
++SNORTSAM_STATE=../snortsam-state
++SNORTSAM_STATE_SRC="../contrib/snortsam-state.c twofish.c"
++
+ # OS specific stuff compiles only on these platforms (need headers/libs)
+-SSP_LINUX_SRC="ssp_ipchains.c ssp_iptables.c ssp_ebtables.c"
++SSP_LINUX_SRC="ssp_ipchains.c ssp_iptables.c ssp_ipset.c ssp_ebtables.c"
+ SSP_OBSD_SRC="ssp_pf.c ssp_pf2.c"
+ SSP_BSD_SRC="ssp_ipf.c ssp_ipfw2.c ssp_pf2.c"
+ SSP_SUNOS_SRC="ssp_ipf.c"
+@@ -138,6 +142,8 @@ case "$1" in
+ 		rm -f ${SNORTSAM}-debug
+ 		rm -f ${SAMTOOL}
+ 		rm -f ${SAMTOOL}-debug
++		rm -f ${SNORTSAM_STATE}
++		rm -f ${SNORTSAM_STATE}-debug
+ 		cd ..
+ 	;;
+ 
+@@ -175,6 +181,40 @@ case "$1" in
+ 		cd ..
+ 	;;
+ 
++    snortsam-state)
++		echo "-------------------------------------------------------------------------------"
++		echo "Building snortsam-state (release)"
++		echo "-------------------------------------------------------------------------------"
++
++		cd src
++		rm -f *.o
++		rm -f ${SNORTSAM_STATE}
++		rm -f ${SNORTSAM_STATE}-debug
++
++		case "${systype}" in
++			Linux*)   gcc -I ../src ${CFLAGS} ${LINUX_CFLAGS} ${LDFLAGS} ${LINUX_LDFLAGS} ${SNORTSAM_STATE_SRC} -o ${SNORTSAM_STATE} ;;
++			OpenBSD*) gcc -I ../src ${CFLAGS} ${OBSD_CFLAGS}  ${LDFLAGS} ${OBSD_LDFLAGS}  ${SNORTSAM_STATE_SRC} -o ${SNORTSAM_STATE} ;;
++			*BSD*)    gcc -I ../src ${CFLAGS} ${BSD_CFLAGS}   ${LDFLAGS} ${BSD_LDFLAGS}   ${SNORTSAM_STATE_SRC} -o ${SNORTSAM_STATE} ;;
++			SunOS)    gcc -I ../src ${CFLAGS} ${SUNOS_CFLAGS} ${LDFLAGS} ${SUNOS_LDFLAGS} ${SNORTSAM_STATE_SRC} -o ${SNORTSAM_STATE} ;;
++		esac
++
++		echo "-------------------------------------------------------------------------------"
++		echo "Building snortsam-state (debug)"
++		echo "-------------------------------------------------------------------------------"
++
++		rm -f *.o
++		CFLAGS="${CFLAGS} -DFWSAMDEBUG"
++		SNORTSAM_STATE="${SNORTSAM_STATE}-debug"
++
++		case "${systype}" in
++			Linux*)   gcc -I ../src ${CFLAGS} ${LINUX_CFLAGS} ${LDFLAGS} ${LINUX_LDFLAGS} ${SNORTSAM_STATE_SRC} -o ${SNORTSAM_STATE} ;;
++			OpenBSD*) gcc -I ../src ${CFLAGS} ${OBSD_CFLAGS}  ${LDFLAGS} ${OBSD_LDFLAGS}  ${SNORTSAM_STATE_SRC} -o ${SNORTSAM_STATE} ;;
++			*BSD*)    gcc -I ../src ${CFLAGS} ${BSD_CFLAGS}   ${LDFLAGS} ${BSD_LDFLAGS}   ${SNORTSAM_STATE_SRC} -o ${SNORTSAM_STATE} ;;
++			SunOS)    gcc -I ../src ${CFLAGS} ${SUNOS_CFLAGS} ${LDFLAGS} ${SUNOS_LDFLAGS} ${SNORTSAM_STATE_SRC} -o ${SNORTSAM_STATE} ;;
++		esac
++		cd ..
++	;;
++
+ 	*)
+ 		echo "-------------------------------------------------------------------------------"
+ 		echo "Building SnortSam (release)"
+diff --git a/snortsam/src/plugins.h b/snortsam/src/plugins.h
+index b719afe..f5fc3e5 100644
+--- a/snortsam/src/plugins.h
++++ b/snortsam/src/plugins.h
+@@ -51,6 +51,7 @@
+ #include "ssp_pf2.h"
+ #include "ssp_ipchains.h"
+ #include "ssp_iptables.h"
++#include "ssp_ipset.h"
+ #include "ssp_ebtables.h"
+ #include "ssp_wgrd.h"
+ #include "ssp_8signs.h"
+@@ -360,6 +361,20 @@ PLUGINREGISTRY Plugins[]={
+ 	"2.9"
+ },
+ /* ------------------------------------------------------------ */
++/* IPSet Plugin */
++{	IPSetInit,
++	NULL,
++	IPSetBlock,
++	IPSetExit,
++	NULL,
++	FALSE,
++	TRUE,
++	TH_SINGLE,
++	"ipset",
++	"Darryl Sokoloski <dsokoloski@clearcenter.com>",
++	"1.0"
++},
++/* ------------------------------------------------------------ */
+ /* EBtables Plugin */
+ {	NULL,
+ 	EBTParse,
+diff --git a/snortsam/src/ssp_ipset.c b/snortsam/src/ssp_ipset.c
+new file mode 100644
+index 0000000..6d9c5bb
+--- /dev/null
++++ b/snortsam/src/ssp_ipset.c
+@@ -0,0 +1,201 @@
++/* $Id: ssp_ipset.c,v 1.0 2017/08/15 10:47:00 dsokoloski Exp $
++ *
++ *
++ * Copyright (c) 2003-2008 Fabizio Tivano <fabrizio@sad.it>
++ * Copyright (c) 2008 Modifications by Luis Marichal <luismarichal@gmail.com>
++ * Copyright (c) 2017 IPSet plugin by Darryl Sokoloski <dsokoloski@clearcenter.com>
++ * All rights reserved.
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ *
++ *
++ * ssp_ipset.c
++ *
++ * Purpose:
++ *
++ * This SnortSam plugin maintains an in-kernel IP set.
++ *
++ */
++
++#ifdef  Linux
++
++#ifndef __SSP_IPSET_C__
++#define __SSP_IPSET_C__
++
++#include "snortsam.h"
++
++#include <net/if.h>
++#include "ssp_ipset.h"
++
++#include <sys/types.h>
++#include <stdio.h>
++#include <string.h>
++#include <stdarg.h>
++#include <time.h>
++#include <netinet/in.h>
++#include <arpa/inet.h>
++#include <errno.h>
++
++/* This is a wrapper routine to execute ipset commands
++*/
++static int IPSetExec(int quiet, const char *args, ...)
++{
++    int rc;
++    va_list ap;
++    FILE *ph;
++    char buffer[IPSetBUFSIZ];
++    char *p2, msg[STRBUFSIZE + 2];
++
++    va_start(ap, args);
++    vsnprintf(buffer, IPSetBUFSIZ, args, ap);
++    va_end(ap);
++#ifdef FWSAMDEBUG
++    printf("Debug: [ipset] Execute: %s\n", buffer);
++#endif
++    ph = popen(buffer, "r");
++    if (!ph) {
++        snprintf(msg, sizeof(msg) - 1,
++            "Error: [ipset] Execution failed: %s", strerror(errno));
++        logmessage(1, msg, "ipset", 0);
++        return 1;
++    }
++
++    while (! feof(ph)) {
++        if (fgets(buffer, IPSetBUFSIZ, ph)) {
++
++            if (quiet) continue;
++
++            snprintf(msg, sizeof(msg) - 1,
++                "Info: [ipset]: %s", msg);
++            logmessage(3, msg, "ipset", 0);
++        }
++    }
++
++    if ((rc = pclose(ph)) != 0) {
++        if (! quiet) {
++            snprintf(msg, sizeof(msg) - 1,
++                "Error: [ipset] Execution failed: %d", rc);
++            logmessage(1, msg, "ipset", 0);
++        }
++    }
++
++    return rc;
++}
++
++/* This routine initializes the IP set(s).
++*/
++int IPSetInit(DATALIST *plugindatalist)
++{
++    if (IPSetExec(FALSE, "ipset --version") != 0) return FALSE;
++
++    if (IPSetExec(TRUE, "ipset -q -t -f /dev/null -L %s", IPSetINGRESS)) {
++        if (IPSetExec(FALSE, "ipset -N %s hash:ip timeout %d",
++            IPSetINGRESS, IPSetTIMEOUT)) return FALSE;
++    }
++    if (IPSetExec(TRUE, "ipset -q -t -f /dev/null -L %s", IPSetEGRESS)) {
++        if (IPSetExec(FALSE, "ipset -N %s hash:ip timeout %d",
++            IPSetEGRESS, IPSetTIMEOUT)) return FALSE;
++    }
++    if (IPSetExec(TRUE, "ipset -q -t -f /dev/null -L %s", IPSetSELF)) {
++        if (IPSetExec(FALSE, "ipset -N %s hash:ip,port,ip timeout %d",
++            IPSetSELF, IPSetTIMEOUT)) return FALSE;
++    }
++
++    // XXX: This can't be NULL otherwise plugin will be silently disabled.
++    plugindatalist->data = (void *)safemalloc(
++        sizeof(unsigned long),
++        "IPSetInit",
++        "ipset"
++    );
++#ifdef FWSAMDEBUG
++    printf("Debug: [ipset] Initialized.\n");
++#endif
++    return TRUE;
++}
++
++/* This routine deletes all IP set(s).
++*/
++void IPSetExit(DATALIST *plugindatalist)
++{
++#ifdef FWSAMDEBUG
++    IPSetExec(TRUE, "ipset -F %s", IPSetINGRESS);
++    IPSetExec(TRUE, "ipset -F %s", IPSetEGRESS);
++    IPSetExec(TRUE, "ipset -F %s", IPSetSELF);
++    printf("Debug: [ipset] Exit.\n");
++#endif
++}
++
++/* This routine adds (or removes) the block from an IP set.
++ */
++void IPSetBlock(BLOCKINFO *bd, void *data, unsigned long qp)
++{
++    char msg[STRBUFSIZE + 2], timeout[IPSetBUFSIZ];
++
++    sprintf(timeout, " timeout %d", bd->duration);
++
++    if (bd->block) {
++        snprintf(msg, sizeof(msg) - 1,
++            "Info: Blocking ip %s", inettoa(bd->blockip));
++    }
++    else {
++        snprintf(msg, sizeof(msg) - 1,
++            "Info: UnBlocking ip %s", inettoa(bd->blockip));
++    }
++
++    logmessage(3, msg, "ipset", 0);
++
++    switch (bd->mode & FWSAM_HOW) {
++    case FWSAM_HOW_IN:
++        IPSetExec(FALSE, "ipset -exist -%c %s %s%s", (bd->block) ? 'A' : 'D',
++            IPSetINGRESS, inettoa(bd->blockip), (bd->block) ? timeout : "");
++        break;
++
++    case FWSAM_HOW_OUT:
++        IPSetExec(FALSE, "ipset -exist -%c %s %s%s", (bd->block) ? 'A' : 'D',
++            IPSetEGRESS, inettoa(bd->blockip), (bd->block) ? timeout : "");
++        break;
++
++    case FWSAM_HOW_INOUT:
++        IPSetExec(FALSE, "ipset -exist -%c %s %s%s", (bd->block) ? 'A' : 'D',
++            IPSetINGRESS, inettoa(bd->blockip), (bd->block) ? timeout : "");
++        IPSetExec(FALSE, "ipset -exist -%c %s %s%s", (bd->block) ? 'A' : 'D',
++            IPSetEGRESS, inettoa(bd->blockip), (bd->block) ? timeout : "");
++        break;
++
++    case FWSAM_HOW_THIS:
++        if (bd->proto != 6 && bd->proto != 17 &&
++            bd->proto != 132 && bd->proto != 136)
++            bd->port = 0;
++        IPSetExec(FALSE, "ipset -exist -%c %s %s,%d:%d,%s%s",
++            (bd->block) ? 'A' : 'D',
++            IPSetSELF,
++            inettoa(bd->blockip), bd->proto, bd->port, inettoa(bd->peerip),
++            (bd->block) ? timeout : "");
++        break;
++    }
++}
++
++#endif /* __SSP_IPSET_C__ */
++#endif /* Linux */
++
++/*
++ * vi: expandtab shiftwidth=4 softtabstop=4 tabstop=4
++ * */
+diff --git a/snortsam/src/ssp_ipset.h b/snortsam/src/ssp_ipset.h
+new file mode 100644
+index 0000000..c0995b5
+--- /dev/null
++++ b/snortsam/src/ssp_ipset.h
+@@ -0,0 +1,59 @@
++/* $Id: ssp_ipset.c,v 1.0 2017/08/15 10:47:00 dsokoloski Exp $
++ *
++ *
++ * Copyright (c) 2003-2008 Fabrizio Tivano <fabrizio@sad.it>
++ * All rights reserved.
++ * Copyright (c) 2017 IPSet plugin by Darryl Sokoloski <dsokoloski@clearcenter.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
++ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
++ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
++ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
++ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
++ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
++ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
++ * SUCH DAMAGE.
++ *
++ *
++ * ssp_ipset.h
++ *
++ * Purpose:
++ *
++ * This SnortSam plugin maintains an in-kernel IP set.
++ *
++ */
++
++
++#ifdef Linux
++
++#ifndef __SSP_IPSET_H__
++#define __SSP_IPSET_H__
++
++#define IPSetTIMEOUT    3600
++#define IPSetBUFSIZ     256
++#define IPSetINGRESS    "snortsam_INGRESS"
++#define IPSetEGRESS     "snortsam_EGRESS"
++#define IPSetSELF       "snortsam_SELF"
++
++int IPSetInit(DATALIST *);
++void IPSetBlock(BLOCKINFO *, void *, unsigned long);
++void IPSetExit(DATALIST *plugindatalist);
++
++#endif /* __SSP_IPSET_H__ */
++#endif /* Linux */
++
++/*
++ * vi: expandtab shiftwidth=4 softtabstop=4 tabstop=4
++ * */

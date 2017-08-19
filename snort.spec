@@ -1,6 +1,6 @@
 Name: snort
 Version: 2.9.6.2
-Release: 2%dist
+Release: 3%dist
 License: GPLv2
 Group: Applications/Misc
 Packager: ClearFoundation
@@ -11,7 +11,6 @@ Source11: snort.logrotate
 Source12: snort.sysv
 Source14: snort-reference.config
 Source100: snortsam-src-2.70.tar.gz
-Source102: snortsam-state.c
 Source110: snortsam.sysv
 Source111: snortsam.conf
 Source112: snortsam-whitelist.conf
@@ -19,6 +18,7 @@ Source113: snortsam-dns-whitelist.conf
 Source200: autogen.sh
 Patch1: snortsam-2.9.5.3.diff
 Patch2: snortsam-ifnamsiz.diff
+Patch3: snortsam-2.9.6.2-ipset.patch
 Requires: daq >= 2.0.2
 Requires: libpcap >= 1.0
 Requires(pre): shadow-utils
@@ -63,6 +63,7 @@ developing applications that use snort.
 %setup -q -n %name-%version -a 100
 %patch1 -p1
 %patch2 -p0
+%patch3 -p1
 
 %build
 sh %SOURCE200
@@ -91,13 +92,11 @@ sh %SOURCE200
 CFLAGS="$RPM_OPT_FLAGS"
 export AM_CFLAGS="-g -O2"
 
-make
+make %{?_smp_mflags}
 
-cp -v %SOURCE102 src
 (cd snortsam && source ./makesnortsam.sh)
 (cd snortsam && source ./makesnortsam.sh samtool)
-cp -v snortsam/src/snortsam.h src/snortsam.h
-(cd src && gcc -O3 -s snortsam-state.c twofish.o -o snortsam-state)
+(cd snortsam && source ./makesnortsam.sh snortsam-state)
 
 %install
 rm -rf %{buildroot}
@@ -127,7 +126,7 @@ install -m 0644 %SOURCE14 %{buildroot}%{_sysconfdir}/snort.d/reference.config
 
 install -m 0755 snortsam/snortsam %{buildroot}%{_sbindir}/
 install -m 0755 snortsam/samtool %{buildroot}%{_sbindir}/
-install -m 0755 src/snortsam-state %{buildroot}%{_bindir}/
+install -m 0755 snortsam/snortsam-state %{buildroot}%{_bindir}/
 install -m 0755 %SOURCE110 %{buildroot}%{_sysconfdir}/rc.d/init.d/snortsam
 install -m 0644 %SOURCE111 %{buildroot}%{_sysconfdir}/snortsam.conf
 install -m 0644 %SOURCE112 %{buildroot}%{_sysconfdir}/snortsam.d/whitelist.conf
