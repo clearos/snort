@@ -1,6 +1,6 @@
 Name: snort
 Version: 2.9.6.2
-Release: 4%dist
+Release: 5%dist
 License: GPLv2
 Group: Applications/Misc
 Packager: ClearFoundation
