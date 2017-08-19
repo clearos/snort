@@ -207,7 +207,7 @@ fi
 %{_libdir}/pkgconfig/snort_preproc.pc
 
 %changelog
-* Fri Aug 18 2017 ClearFoundation <developer@clearfoundation.com> - 2.9.6.2-4.clear
+* Fri Aug 18 2017 ClearFoundation <developer@clearfoundation.com> - 2.9.6.2-5.clear
 - Added new ipset plugin, ssp_ipset.c (snortsam).
 
 * Sat Oct 31 2015 ClearFoundation <developer@clearfoundation.com> - 2.9.6.2-2.clear
