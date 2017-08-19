@@ -1,0 +1,32 @@
+SNORTSAM_TIMEOUT=3600
+SNORTSAM_INGRESS=snortsam_INGRESS
+SNORTSAM_EGRESS=snortsam_EGRESS
+SNORTSAM_SELF=snortsam_SELF
+
+if [ "$FW_PROTO" == "ipv4" ]; then
+    # XXX: For testing...
+    #ipset -X ${SNORTSAM_INGRESS}
+    #ipset -X ${SNORTSAM_EGRESS}
+    #ipset -X ${SNORTSAM_SELF}
+
+    if ! ipset -q -t -f /dev/null -L ${SNORTSAM_INGRESS}; then
+        ipset -N ${SNORTSAM_INGRESS} hash:ip timeout ${SNORTSAM_TIMEOUT}
+    fi
+
+    if ! ipset -q -t -f /dev/null -L ${SNORTSAM_EGRESS}; then
+        ipset -N ${SNORTSAM_EGRESS} hash:ip timeout ${SNORTSAM_TIMEOUT}
+    fi
+
+    if ! ipset -q -t -f /dev/null -L ${SNORTSAM_SELF}; then
+        ipset -N ${SNORTSAM_SELF} hash:ip,port,ip timeout ${SNORTSAM_TIMEOUT}
+    fi
+
+    $IPTABLES -I INPUT -m set --match-set snortsam_INGRESS src -j DROP
+    $IPTABLES -I FORWARD -m set --match-set snortsam_INGRESS src -j DROP
+
+    $IPTABLES -I OUTPUT -m set --match-set snortsam_EGRESS dst -j DROP
+    $IPTABLES -I FORWARD -m set --match-set snortsam_EGRESS dst -j DROP
+
+    $IPTABLES -I OUTPUT -m set --match-set snortsam_SELF src,dst,dst -j DROP
+    $IPTABLES -I FORWARD -m set --match-set snortsam_SELF src,dst,dst -j DROP
+fi

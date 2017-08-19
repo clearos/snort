@@ -1,6 +1,6 @@
 Name: snort
 Version: 2.9.6.2
-Release: 3%dist
+Release: 4%dist
 License: GPLv2
 Group: Applications/Misc
 Packager: ClearFoundation
@@ -15,6 +15,7 @@ Source110: snortsam.sysv
 Source111: snortsam.conf
 Source112: snortsam-whitelist.conf
 Source113: snortsam-dns-whitelist.conf
+Source114: 10-snortsam
 Source200: autogen.sh
 Patch1: snortsam-2.9.5.3.diff
 Patch2: snortsam-ifnamsiz.diff
@@ -106,6 +107,7 @@ mkdir -p -m 755 %{buildroot}%{_sysconfdir}/logrotate.d
 mkdir -p -m 755 %{buildroot}%{_sysconfdir}/rc.d/init.d
 mkdir -p -m 755 %{buildroot}%{_sysconfdir}/snortsam.d
 mkdir -p -m 755 %{buildroot}%{_sysconfdir}/snort.d/rules
+mkdir -p -m 755 %{buildroot}%{_sysconfdir}/clearos/firewall.d
 mkdir -p -m 755 %{buildroot}%{_bindir}
 mkdir -p -m 755 %{buildroot}%{_sbindir}
 mkdir -p -m 755 %{buildroot}%{_datadir}/snort
@@ -131,6 +133,7 @@ install -m 0755 %SOURCE110 %{buildroot}%{_sysconfdir}/rc.d/init.d/snortsam
 install -m 0644 %SOURCE111 %{buildroot}%{_sysconfdir}/snortsam.conf
 install -m 0644 %SOURCE112 %{buildroot}%{_sysconfdir}/snortsam.d/whitelist.conf
 install -m 0644 %SOURCE113 %{buildroot}%{_sysconfdir}/snortsam.d/dns-whitelist.conf
+install -m 0644 %SOURCE114 %{buildroot}%{_sysconfdir}/clearos/firewall.d/10-snortsam
 
 rm -rf %{buildroot}/usr/share/doc
 rm -rf %{buildroot}/usr/src/snort_dynamicsrc
@@ -187,6 +190,7 @@ fi
 %{_sysconfdir}/rc.d/init.d/snortsam
 %{_sysconfdir}/snort.d/classification.config
 %{_sysconfdir}/snort.d/reference.config
+%{_sysconfdir}/clearos/firewall.d/10-snortsam
 %dir %{_sysconfdir}/snort.d
 %dir %{_sysconfdir}/snort.d/rules
 %dir %{_sysconfdir}/snortsam.d
@@ -203,6 +207,9 @@ fi
 %{_libdir}/pkgconfig/snort_preproc.pc
 
 %changelog
+* Fri Aug 18 2017 ClearFoundation <developer@clearfoundation.com> - 2.9.6.2-4.clear
+- Added new ipset plugin, ssp_ipset.c (snortsam).
+
 * Sat Oct 31 2015 ClearFoundation <developer@clearfoundation.com> - 2.9.6.2-2.clear
 - Added patch for IFNAMSIZ interface name lengths in ssp_iptables.c (snortsam).
 
