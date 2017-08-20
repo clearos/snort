@@ -176,7 +176,7 @@ index b719afe..f5fc3e5 100644
  	EBTParse,
 diff --git a/snortsam/src/ssp_ipset.c b/snortsam/src/ssp_ipset.c
 new file mode 100644
-index 0000000..99c6e45
+index 0000000..46cc22b
 --- /dev/null
 +++ b/snortsam/src/ssp_ipset.c
 @@ -0,0 +1,231 @@
@@ -322,11 +322,11 @@ index 0000000..99c6e45
 +        if (errno != ENOENT) return FALSE;
 +    }
 +
-+    if (state_stat.st_size > 0) {
-+        IPSetExec(TRUE, "ipset -F %s", IPSetINGRESS);
-+        IPSetExec(TRUE, "ipset -F %s", IPSetEGRESS);
-+        IPSetExec(TRUE, "ipset -F %s", IPSetSELF);
++    IPSetExec(TRUE, "ipset -F %s", IPSetINGRESS);
++    IPSetExec(TRUE, "ipset -F %s", IPSetEGRESS);
++    IPSetExec(TRUE, "ipset -F %s", IPSetSELF);
 +
++    if (state_stat.st_size > 0) {
 +        if ((fd = mkstemp(template)) >= 0) {
 +            IPSetExec(FALSE, "grep -v '^create' %s > %s",
 +                IPSetSTATE, template);
